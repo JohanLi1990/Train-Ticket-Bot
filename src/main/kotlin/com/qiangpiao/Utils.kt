@@ -3,7 +3,7 @@ package com.qiangpiao
 import java.util.*
 
 //https://medium.com/@platky/very-simple-property-reading-in-kotlin-3265cb4382bf
-private const val CONFIG = "config.properties"
+private const val CONFIG = "config_debug.properties"
 
 object PropertiesReader {
     private val properties = Properties()

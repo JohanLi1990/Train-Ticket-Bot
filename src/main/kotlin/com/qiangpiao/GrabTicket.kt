@@ -2,6 +2,7 @@ package com.qiangpiao
 
 import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -41,7 +42,10 @@ class GrabTicket(args: Array<String>?) {
             val driver1 = ChromeDriver(chromeOptions("localhost:1234", arrayOf("--start-maximized")))
 //            val driver2 = ChromeDriver(chromeOptions("localhost:8989", arrayOf("--start-maximized")))
             supervisorScope {
-                bookOneWay(driver1, "26 May 2024", PropertiesReader.getProperty("JBWDL"), true)
+//                bookOneWay(driver1, "24 Aug 2024", PropertiesReader.getProperty("JBWDL"), true)
+                val tripTimes = PropertiesReader.getProperty("JBWDL_RETURN").split(",")
+                bookReturn(driver1, "15 Sep 2024", returnDate = "21 Sep 2024",
+                    onWardTripTime = tripTimes[0], returnTripTime = tripTimes[1], jBToWdl = true)
 //                bookOneWay(driver2, "9 Aug 2024", PropertiesReader.getProperty("WDLJB"))
             }
 
@@ -75,15 +79,25 @@ class GrabTicket(args: Array<String>?) {
                            onwardDate:String,
                            tripTime: String, isReturn:Boolean=false) {
         launch (CoroutineName(onwardDate))  {
-            buyTicket(driver1, onwardDate, "", onWardTime = tripTime, jBToWdl = isReturn)
+//            buyTicket(driver1, onwardDate, "", onWardTime = tripTime, jBToWdl = isReturn)
+
+            BookTicketStateMachine(
+                driver = driver1, onWardDate = onwardDate,
+                onWardTime =tripTime,
+                returnDate = "", returnTime = "", jBToWdl = isReturn
+            ).decide(State.LOGIN)
         }
     }
 
     private fun CoroutineScope.bookReturn(driver:ChromeDriver, onWardDate: String,
                            onWardTripTime: String,
                            returnDate:String, returnTripTime:String, jBToWdl: Boolean) {
-        launch(CoroutineName(onWardDate)) {
-            buyTicket(driver, onWardDate, returnDate, onWardTripTime, returnTripTime, jBToWdl)
+        launch(CoroutineName(onWardDate) + Dispatchers.IO) {
+//            buyTicket(driver, onWardDate, returnDate, onWardTripTime, returnTripTime, jBToWdl)
+            BookTicketStateMachine(
+                driver = driver, onWardDate = onWardDate, returnDate = returnDate,
+                onWardTime = onWardTripTime, returnTime = returnTripTime, jBToWdl = jBToWdl
+            ).decide(State.LOGIN)
         }
     }
 
@@ -306,7 +320,7 @@ class GrabTicket(args: Array<String>?) {
 }
 
 enum class State {
-    LOGIN, SELECT_DATE, SELECT_TIME, UPDATE_PSG_DETAILS, QUIT
+    LOGIN, SELECT_DATE, SELECT_TIME, RECAPTCHA,UPDATE_PSG_DETAILS, QUIT
 }
 
 
