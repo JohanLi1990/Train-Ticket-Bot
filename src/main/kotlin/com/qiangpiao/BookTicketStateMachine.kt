@@ -20,7 +20,7 @@ class BookTicketStateMachine(
     val returnTime: String,
     val jBToWdl: Boolean = false
 ) {
-    private val wait:WebDriverWait = WebDriverWait(driver, Duration.ofSeconds(15))
+    private val wait: WebDriverWait = WebDriverWait(driver, Duration.ofSeconds(15))
 
     suspend fun decide(state: State) {
 
@@ -50,18 +50,19 @@ class BookTicketStateMachine(
                 decide(res)
             }
 
-            State.UPDATE_PSG_DETAILS ->{
+            State.UPDATE_PSG_DETAILS -> {
                 val res = updatePassengerDetails()
                 delay(200)
                 decide(res)
             }
+
             State.QUIT -> {
                 println("${Thread.currentThread().name}: service ended...")
             }
         }
     }
 
-    private fun updatePassengerDetails() : State{
+    private fun updatePassengerDetails(): State {
         return try {
             wait.until(ExpectedConditions.titleIs("Passenger details"))
             println("successfully landed in passenger details page...")
@@ -128,38 +129,44 @@ class BookTicketStateMachine(
             println("Presence of popup modal detected...retry")
             return State.SELECT_DATE
         }
-        if (!jBToWdl) {
-            // reverse direction
-            val reverse = driver.findElement(By.cssSelector("i[onclick='SwapFromToTerminal()']"))
-            wait.until {
-                reverse.isDisplayed
+        try {
+            if (!jBToWdl) {
+                // reverse direction
+                val reverse = driver.findElement(By.cssSelector("i[onclick='SwapFromToTerminal()']"))
+                wait.until {
+                    reverse.isDisplayed
+                }
+                reverse.click()
             }
-            reverse.click()
+
+            wait.until {
+                val pax = driver.findElement(By.id("PassengerCount"))
+                val numOfPeople = PropertiesReader.getProperty("pax")
+                Select(pax).apply {
+                    selectByValue(numOfPeople)
+                }
+                return@until true
+            }
+            setDepartureDate()
+            if (returnDate.isNotEmpty()) {
+                setReturnDate()
+            }
+            wait.until {
+                driver.findElement(By.id("btnSubmit")).click()
+                return@until true
+            }
+            return State.SELECT_TIME
+        } catch (e: Exception) {
+            println(e.message)
+            return State.LOGIN
         }
 
-        wait.until {
-            val pax = driver.findElement(By.id("PassengerCount"))
-            val numOfPeople = PropertiesReader.getProperty("pax")
-            Select(pax).apply {
-                selectByValue(numOfPeople)
-            }
-            return@until true
-        }
-        setDepartureDate()
-        if (returnDate.isNotEmpty()) {
-            setReturnDate()
-        }
-        wait.until {
-            driver.findElement(By.id("btnSubmit")).click()
-            return@until true
-        }
-        return State.SELECT_TIME
     }
 
     private fun popupModalIsPresent(): Boolean {
         try {
             val specialWait = WebDriverWait(driver, Duration.ofSeconds(2))
-            val style =  specialWait.until {
+            val style = specialWait.until {
                 val spin = driver.findElement(By.id("popupModal"))
                 return@until spin.getAttribute("style")
             }
@@ -170,7 +177,7 @@ class BookTicketStateMachine(
     }
 
 
-    private fun handleCaptcha() : State{
+    private fun handleCaptcha(): State {
         // to avoid captcha you need to visit once and remember the cookies
 //    https://stackoverflow.com/questions/43715178/click-on-captcha-via-selenium-always-raised-picture-verification
         return try {
@@ -182,7 +189,7 @@ class BookTicketStateMachine(
             val js = driver as JavascriptExecutor
             js.executeScript("document.getElementsByClassName('recaptcha-checkbox-checkmark')[0].click()")
             State.UPDATE_PSG_DETAILS
-        } catch (e : Exception) {
+        } catch (e: Exception) {
             driver.navigate().refresh()
             State.SELECT_DATE
         }
@@ -221,7 +228,7 @@ class BookTicketStateMachine(
                 else -> throw e
             }
             driver.navigate().refresh()
-            return State.SELECT_TIME
+            return State.SELECT_DATE
         }
 
     }
