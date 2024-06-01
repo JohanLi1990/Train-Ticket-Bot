@@ -1,5 +1,6 @@
 package com.qiangpiao
 
+import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.delay
 import org.openqa.selenium.By
 import org.openqa.selenium.ElementNotInteractableException
@@ -18,16 +19,29 @@ class BookTicketStateMachine(
     val returnDate: String,
     val onWardTime: String = "0800",
     val returnTime: String,
-    val jBToWdl: Boolean = false
+    val jBToWdl: Boolean = false,
+    val mode: Mode = Mode.HUSTLE
 ) {
     private val wait: WebDriverWait = WebDriverWait(driver, Duration.ofSeconds(15))
+    private var countDown = if (mode == Mode.MONITOR) 2000 else 10
+    companion object{
+        private val logger = KotlinLogging.logger{}
+    }
 
-    suspend fun decide(state: State) {
+    suspend fun runStateMachine() {
+        logger.info { "${Thread.currentThread().name}: starts...." }
+        decide(State.LOGIN)
+    }
 
+    private suspend fun decide(state: State) {
+        if (countDown == 0) {
+            logger.info { "count-down reached... terminating" }
+            return
+        }
         when (state) {
             State.LOGIN -> {
                 val res = login()
-                delay(500)
+                delay(300)
                 decide(res)
             }
 
@@ -39,7 +53,7 @@ class BookTicketStateMachine(
 
             State.SELECT_TIME -> {
                 val res = selectTimeSlot()
-                delay(1500)
+                delay(1000)
                 decide(res)
 
             }
@@ -57,25 +71,27 @@ class BookTicketStateMachine(
             }
 
             State.QUIT -> {
-                println("${Thread.currentThread().name}: service ended...")
+                logger.info{"${Thread.currentThread().name}: state machine ended..."}
             }
         }
     }
 
     private fun updatePassengerDetails(): State {
         return try {
+            if (driver.title != "Passenger details") {
+                logger.info{"${Thread.currentThread().name} did not land on Passenger details..."}
+                if (mode == Mode.HUSTLE) State.SELECT_DATE else State.LOGIN
+            }
             wait.until(ExpectedConditions.titleIs("Passenger details"))
-            println("successfully landed in passenger details page...")
             fillInForSelf()
             fillInForOthers()
+            logger.info{"${Thread.currentThread().name} successfully landed in passenger details page..."}
             State.QUIT
         } catch (e: Exception) {
             // something wrong
-            driver.navigate().refresh()
-            println("Update not working")
-            State.UPDATE_PSG_DETAILS
+            logger.info{"Something is wrong at Update Passengers page... do not go away"}
+            State.QUIT
         }
-
     }
 
     private fun fillInForOthers() {
@@ -100,7 +116,6 @@ class BookTicketStateMachine(
         try {
             wait.until {
                 driver.title.isNotBlank()
-                println(driver.title)
                 return@until true
             }
             if (!driver.title.equals("Login")) return State.SELECT_DATE
@@ -115,8 +130,9 @@ class BookTicketStateMachine(
             }
             return State.SELECT_DATE
         } catch (e: Exception) {
-            println("exception: ${e.message}")
+            logger.info{"exception: ${e.message}"}
             // retry
+            countDown--
             return State.LOGIN
         }
 
@@ -126,8 +142,8 @@ class BookTicketStateMachine(
         driver.get(PropertiesReader.getProperty("shuttle_url"))
         // need to dismiss modal
         if (popupModalIsPresent()) {
-            println("Presence of popup modal detected...retry")
-            return State.SELECT_DATE
+            logger.info{"Presence of popup modal detected...retry"}
+            return if (mode == Mode.HUSTLE) State.SELECT_DATE else State.LOGIN
         }
         try {
             if (!jBToWdl) {
@@ -157,10 +173,10 @@ class BookTicketStateMachine(
             }
             return State.SELECT_TIME
         } catch (e: Exception) {
-            println(e.message)
-            return State.LOGIN
+            logger.info { "retry from select date..." }
+            countDown--
+            return if (mode == Mode.HUSTLE) State.SELECT_DATE else State.LOGIN
         }
-
     }
 
     private fun popupModalIsPresent(): Boolean {
@@ -190,19 +206,19 @@ class BookTicketStateMachine(
             js.executeScript("document.getElementsByClassName('recaptcha-checkbox-checkmark')[0].click()")
             State.UPDATE_PSG_DETAILS
         } catch (e: Exception) {
-            driver.navigate().refresh()
-            State.SELECT_DATE
+            countDown--
+            if (mode == Mode.HUSTLE) {
+                State.SELECT_DATE
+            } else State.LOGIN
         }
     }
 
     private fun selectTimeSlot(): State {
-        // if Modal is present -> retry
-        // if it is sold out or not present yet -> retry
         val specialWait = WebDriverWait(driver, Duration.ofSeconds(2))
         try {
             if (popupModalIsPresent()) {
-                driver.navigate().refresh()
-                return State.SELECT_TIME
+                countDown--
+                return if (mode == Mode.HUSTLE) State.SELECT_DATE else State.LOGIN
             }
 
             specialWait.until {
@@ -221,14 +237,13 @@ class BookTicketStateMachine(
             }
             return State.RECAPTCHA
         } catch (e: Exception) {
-            // cannot select row:
             when (e) {
-                is TimeoutException -> println("${Thread.currentThread().name}: time out")
-                is ElementNotInteractableException -> println("${Thread.currentThread().name}:not enabled yet")
+                is TimeoutException -> logger.info{"${Thread.currentThread().name}: time out"}
+                is ElementNotInteractableException -> logger.info{"${Thread.currentThread().name}:not enabled yet"}
                 else -> throw e
             }
-            driver.navigate().refresh()
-            return State.SELECT_DATE
+            countDown--
+            return if (mode == Mode.HUSTLE) State.SELECT_DATE else State.LOGIN
         }
 
     }
@@ -243,14 +258,16 @@ class BookTicketStateMachine(
     }
 
     private fun setDepartureDate() {
-        // TODO if not specified default to the weekend 6 months later
         wait.until {
             driver.findElement(By.id("OnwardDate"))
             return@until true
         }
         val js = driver as JavascriptExecutor
         js.executeScript("document.getElementById('OnwardDate').value='$onWardDate'")
+    }
 
+    private enum class State {
+        LOGIN, SELECT_DATE, SELECT_TIME, RECAPTCHA,UPDATE_PSG_DETAILS, QUIT
     }
 
 }

@@ -2,54 +2,33 @@ package com.qiangpiao
 
 import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.asCoroutineDispatcher
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.supervisorScope
-import org.openqa.selenium.By
-import org.openqa.selenium.ElementNotInteractableException
-import org.openqa.selenium.JavascriptExecutor
-import org.openqa.selenium.Keys
-import org.openqa.selenium.NoSuchElementException
-import org.openqa.selenium.StaleElementReferenceException
-import org.openqa.selenium.TimeoutException
-import org.openqa.selenium.WebDriver
-import org.openqa.selenium.WebElement
 import org.openqa.selenium.chrome.ChromeDriver
 import org.openqa.selenium.chrome.ChromeOptions
-import org.openqa.selenium.support.ui.ExpectedConditions
-import org.openqa.selenium.support.ui.Select
-import org.openqa.selenium.support.ui.WebDriverWait
-import java.time.Duration
 import java.util.concurrent.Executors
 
 class GrabTicket(args: Array<String>?) {
-    private var mode: String
-
-    private val dispatcher = Executors.newFixedThreadPool(5).asCoroutineDispatcher()
-
-    init {
-        mode = if (!args.isNullOrEmpty()) {
-            args[0]
-        } else {
-            ""
-        }
+    private var tempOperatingMode: String = if (!args.isNullOrEmpty()) {
+        args[0]
+    } else {
+        ""
     }
+    private val dispatcher = Executors.newFixedThreadPool(5).asCoroutineDispatcher()
+//    private val dispatcher = Dispatchers.Default
 
     fun process(): Unit = runBlocking{
-        if (mode == "monitor") {
+        if (tempOperatingMode == "one") {
             // start one Chrome browser
             println("launching one browser only...")
             val driver1 = ChromeDriver(chromeOptions("localhost:1234", arrayOf("--start-maximized")))
 //            val driver2 = ChromeDriver(chromeOptions("localhost:8989", arrayOf("--start-maximized")))
             supervisorScope {
 //                bookOneWay(driver1, "24 Aug 2024", PropertiesReader.getProperty("JBWDL"), true)
-                val tripTimes = PropertiesReader.getProperty("JBWDL_RETURN").split(",")
-                bookReturn(driver1, "15 Sep 2024", returnDate = "21 Sep 2024",
-                    onWardTripTime = tripTimes[0], returnTripTime = tripTimes[1], jBToWdl = true)
+//                val tripTimes = PropertiesReader.getProperty("JBWDL_RETURN").split(",")
+                bookOneWay(driver1, "20 Oct 2024", tripTime="2015", isReturn = true)
 //                bookOneWay(driver2, "9 Aug 2024", PropertiesReader.getProperty("WDLJB"))
             }
         } else {
@@ -57,15 +36,17 @@ class GrabTicket(args: Array<String>?) {
             val driver1 = ChromeDriver(chromeOptions("localhost:1234", arrayOf("--start-maximized")))
             val driver2 = ChromeDriver(chromeOptions("localhost:8989", arrayOf("--start-maximized")))
             val driver3 = ChromeDriver(chromeOptions("localhost:7000", arrayOf("--start-maximized")))
-            val tripTimes = PropertiesReader.getProperty("JBWDL_RETURN").split(",")
 
             supervisorScope {
-                bookOneWay(driver1, "3 Aug 2024", PropertiesReader.getProperty("WDLJB"))
-                bookOneWay(driver2, "10 Nov 2024",PropertiesReader.getProperty("JBWDL"), true)
-                bookReturn(driver3, "15 Sep 2024", returnDate = "21 Sep 2024",
-                    onWardTripTime = tripTimes[0], returnTripTime = tripTimes[1], jBToWdl = true)
+                bookReturn(driver1, "3 Nov 2024", "2015",
+                    returnDate = "9 Nov 2024", returnTripTime = "0830", jBToWdl = true)
+                bookReturn(driver2, "10 Nov 2024", returnDate = "23 Nov 2024",
+                    onWardTripTime = "2015", returnTripTime = "0830", jBToWdl = true)
+                bookOneWay(driver3, "17 Nov 2024","2015", true)
+
             }
         }
+        dispatcher.close()
     }
 
     private fun chromeOptions(host:String, args:Array<String>): ChromeOptions {
@@ -84,8 +65,8 @@ class GrabTicket(args: Array<String>?) {
             BookTicketStateMachine(
                 driver = driver1, onWardDate = onwardDate,
                 onWardTime =tripTime,
-                returnDate = "", returnTime = "", jBToWdl = isReturn
-            ).decide(State.LOGIN)
+                returnDate = "", returnTime = "", jBToWdl = isReturn, mode = Mode.HUSTLE
+            ).runStateMachine()
         }
     }
 
@@ -96,14 +77,14 @@ class GrabTicket(args: Array<String>?) {
             BookTicketStateMachine(
                 driver = driver, onWardDate = onWardDate, returnDate = returnDate,
                 onWardTime = onWardTripTime, returnTime = returnTripTime, jBToWdl = jBToWdl
-            ).decide(State.LOGIN)
+            ).runStateMachine()
         }
     }
 
 }
 
-enum class State {
-    LOGIN, SELECT_DATE, SELECT_TIME, RECAPTCHA,UPDATE_PSG_DETAILS, QUIT
+enum class Mode {
+    HUSTLE, MONITOR
 }
 
 
