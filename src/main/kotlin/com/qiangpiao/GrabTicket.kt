@@ -1,55 +1,45 @@
 package com.qiangpiao
 
+import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.supervisorScope
+import org.apache.commons.cli.DefaultParser
+import org.apache.commons.cli.HelpFormatter
+import org.apache.commons.cli.Option
+import org.apache.commons.cli.Options
 import org.openqa.selenium.chrome.ChromeDriver
 import org.openqa.selenium.chrome.ChromeOptions
 import java.util.concurrent.Executors
 
-class GrabTicket(args: Array<String>?) {
-    private var tempOperatingMode: String = if (!args.isNullOrEmpty()) {
-        args[0]
-    } else {
-        ""
+class GrabTicket {
+    private val dispatcher = Executors.newFixedThreadPool(3).asCoroutineDispatcher()
+    companion object{
+        val logger = KotlinLogging.logger{}
     }
-    private val dispatcher = Executors.newFixedThreadPool(5).asCoroutineDispatcher()
-//    private val dispatcher = Dispatchers.Default
-
-    fun process(): Unit = runBlocking{
-        if (tempOperatingMode == "one") {
-            // start one Chrome browser
-            println("launching one browser only...")
-            val driver1 = ChromeDriver(chromeOptions("localhost:1234", arrayOf("--start-maximized")))
-//            val driver2 = ChromeDriver(chromeOptions("localhost:8989", arrayOf("--start-maximized")))
-            supervisorScope {
-//                bookOneWay(driver1, "24 Aug 2024", PropertiesReader.getProperty("JBWDL"), true)
-//                val tripTimes = PropertiesReader.getProperty("JBWDL_RETURN").split(",")
-                bookOneWay(driver1, "20 Oct 2024", tripTime="2015", isReturn = true)
-//                bookOneWay(driver2, "9 Aug 2024", PropertiesReader.getProperty("WDLJB"))
-            }
-        } else {
-            println("launching three browser...")
-            val driver1 = ChromeDriver(chromeOptions("localhost:1234", arrayOf("--start-maximized")))
-            val driver2 = ChromeDriver(chromeOptions("localhost:8989", arrayOf("--start-maximized")))
-            val driver3 = ChromeDriver(chromeOptions("localhost:7000", arrayOf("--start-maximized")))
-
-            supervisorScope {
-                bookReturn(driver1, "3 Nov 2024", "2015",
-                    returnDate = "9 Nov 2024", returnTripTime = "0830", jBToWdl = true)
-                bookReturn(driver2, "10 Nov 2024", returnDate = "23 Nov 2024",
-                    onWardTripTime = "2015", returnTripTime = "0830", jBToWdl = true)
-                bookOneWay(driver3, "17 Nov 2024","2015", true)
-
+    fun process(trips: List<Trip>) : Unit = runBlocking {
+        supervisorScope {
+            for ((i, trip) in trips.withIndex()) {
+                logger.info { "trip-$i:${trip}" }
+                val driver =  ChromeDriver(chromeOptions(PropertiesReader.getProperty("host_$i"), arrayOf("--start-maximized")))
+                if (trip.isOneWay()) {
+                    bookOneWay(driver, trip.onwardDate, trip.onwardTime,
+                        trip.isJBToWDL, trip.pax, Mode.getMode(trip.Mode))
+                } else{
+                    bookReturn(driver, trip.onwardDate, trip.onwardTime,
+                        trip.returnDate!!, trip.returnTime!!, trip.isJBToWDL, trip.pax,
+                        Mode.getMode(trip.Mode))
+                }
             }
         }
         dispatcher.close()
     }
 
-    private fun chromeOptions(host:String, args:Array<String>): ChromeOptions {
+
+    private fun chromeOptions(host: String, args: Array<String>): ChromeOptions {
         val options = ChromeOptions()
         options.setExperimentalOption("debuggerAddress", host)
         args.forEach {
@@ -58,25 +48,31 @@ class GrabTicket(args: Array<String>?) {
         return options
     }
 
-    private fun CoroutineScope.bookOneWay(driver1: ChromeDriver,
-                           onwardDate:String,
-                           tripTime: String, isReturn:Boolean=false) {
-        launch (CoroutineName(onwardDate) + dispatcher)  {
+    private fun CoroutineScope.bookOneWay(
+        driver1: ChromeDriver,
+        onwardDate: String,
+        tripTime: String, isReturn: Boolean = false, pax:Int, inputMode:Mode=Mode.HUSTLE
+    ) {
+        launch(CoroutineName(onwardDate) + dispatcher) {
             BookTicketStateMachine(
                 driver = driver1, onWardDate = onwardDate,
-                onWardTime =tripTime,
-                returnDate = "", returnTime = "", jBToWdl = isReturn, mode = Mode.HUSTLE
+                onWardTime = tripTime,
+                returnDate = "", returnTime = "", jBToWdl = isReturn, mode = inputMode, numOfPassenger = pax
             ).runStateMachine()
         }
     }
 
-    private fun CoroutineScope.bookReturn(driver:ChromeDriver, onWardDate: String,
-                           onWardTripTime: String,
-                           returnDate:String, returnTripTime:String, jBToWdl: Boolean) {
+    private fun CoroutineScope.bookReturn(
+        driver: ChromeDriver, onWardDate: String,
+        onWardTripTime: String,
+        returnDate: String, returnTripTime: String, jBToWdl: Boolean, pax:Int,
+        inputMode: Mode = Mode.HUSTLE
+    ) {
         launch(CoroutineName(onWardDate) + dispatcher) {
             BookTicketStateMachine(
                 driver = driver, onWardDate = onWardDate, returnDate = returnDate,
-                onWardTime = onWardTripTime, returnTime = returnTripTime, jBToWdl = jBToWdl
+                onWardTime = onWardTripTime, returnTime = returnTripTime, jBToWdl = jBToWdl,
+                numOfPassenger = pax, mode = inputMode
             ).runStateMachine()
         }
     }
@@ -84,7 +80,17 @@ class GrabTicket(args: Array<String>?) {
 }
 
 enum class Mode {
-    HUSTLE, MONITOR
+    HUSTLE , MONITOR;
+    companion object{
+        fun getMode(s : String) : Mode {
+            return if (s == "H") {
+                HUSTLE
+            } else {
+                MONITOR
+            }
+        }
+    }
+
 }
 
 
@@ -102,8 +108,42 @@ fun main(args: Array<String>) {
      * .\chrome.exe --remote-debugging-port=8989 --user-data-dir=D:/usrData
      * .\chrome.exe --remote-debugging-port=7000 --user-data-dir=D:/usrData3
      */
+    val options = Options().apply {
+        addOption(Option("help", "print this message"))
+        addOption(
+            Option.builder("trips").argName("Trip Information")
+                .hasArgs().desc("7 fields could be defined, the first 5 are optional: \n" +
+                        "<Pax, Onward Date, Onward Time,isJBToWDL,Mode,Return Date, Return Time>. \n" +
+                        "For Pax, it could be up to 6; For Date input, use format like 24 Nov 2024, \n" +
+                        "For time input, use format like 2015 (8:15pm) or 0830, based on KTMB schedule.\n" +
+                        "For isJBToWDL, it is either y or n\n" +
+                        "For mode, it is either H or M\n"+
+                        "Return Date and Return time are optional, \n" +
+                        " if any is empty, we will treat it as a one way trip.\n" +
+                        "Currently we support simultaneous booking of 3 trips"
+                ).build()
+        )
+    }
 
-    val app = GrabTicket(args)
-    app.process()
+    val parser = DefaultParser()
+    val line = parser.parse(options, args)
+    if (line.hasOption("help")) {
+        HelpFormatter().printHelp("GrabTicket", options)
+        return
+    }
 
+    if (line.hasOption("trips")) {
+        val ans = line.getOptionValues("trips")
+        val trips = ArrayList<Trip>().apply {
+            ans.forEach {
+                val tripDetails = it.split(",")
+                add(Trip(tripDetails[0].trim().toInt(), tripDetails[1].trim(),
+                    tripDetails[2].trim(),tripDetails[3].trim() == "y",
+                    tripDetails[4].trim(),
+                    tripDetails.getOrNull(5)?.trim(), tripDetails.getOrNull(5)?.trim()))
+            }
+        }
+        GrabTicket().process(trips)
+    }
 }
+
