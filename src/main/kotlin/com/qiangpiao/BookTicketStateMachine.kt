@@ -20,10 +20,11 @@ class BookTicketStateMachine(
     val onWardTime: String = "0800",
     val returnTime: String,
     val jBToWdl: Boolean = false,
-    val mode: Mode = Mode.HUSTLE
+    val mode: Mode = Mode.HUSTLE,
+    val numOfPassenger:Int=1
 ) {
     private val wait: WebDriverWait = WebDriverWait(driver, Duration.ofSeconds(15))
-    private var countDown = if (mode == Mode.MONITOR) 2000 else 10
+    private var countDown = if (mode == Mode.MONITOR) 2000 else 100
     companion object{
         private val logger = KotlinLogging.logger{}
     }
@@ -95,9 +96,8 @@ class BookTicketStateMachine(
     }
 
     private fun fillInForOthers() {
-        val num = Integer.parseInt(PropertiesReader.getProperty("pax"))
-        if (num == 1) return
-        for (i in 1..<num) {
+        if (numOfPassenger == 1) return
+        for (i in 1..<numOfPassenger) {
             wait.until {
                 val psg = driver.findElement(By.id("Passengers_${i}__FullName"))
                 psg.sendKeys(PropertiesReader.getProperty("PASSENGER${i}"))
@@ -157,9 +157,8 @@ class BookTicketStateMachine(
 
             wait.until {
                 val pax = driver.findElement(By.id("PassengerCount"))
-                val numOfPeople = PropertiesReader.getProperty("pax")
                 Select(pax).apply {
-                    selectByValue(numOfPeople)
+                    selectByValue(numOfPassenger.toString())
                 }
                 return@until true
             }
