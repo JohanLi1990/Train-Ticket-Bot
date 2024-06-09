@@ -24,7 +24,10 @@ class GrabTicket {
         supervisorScope {
             for ((i, trip) in trips.withIndex()) {
                 logger.info { "trip-$i:${trip}" }
-                val driver =  ChromeDriver(chromeOptions(PropertiesReader.getProperty("host_$i"), arrayOf("--start-maximized")))
+                // start chrome browser
+                startChromeBrowser(i)
+                val port = PropertiesReader.getProperty("port_$i")
+                val driver =  ChromeDriver(chromeOptions("localhost:$port", arrayOf("--start-maximized")))
                 if (trip.isOneWay()) {
                     bookOneWay(driver, trip.onwardDate, trip.onwardTime,
                         trip.isJBToWDL, trip.pax, Mode.getMode(trip.Mode))
@@ -36,6 +39,13 @@ class GrabTicket {
             }
         }
         dispatcher.close()
+    }
+
+    private fun startChromeBrowser(index:Int) {
+        val curPort = PropertiesReader.getProperty("port_$index")
+        val user = PropertiesReader.getProperty("user_${index}_dir")
+        val cmd = arrayOf(PropertiesReader.getProperty("chrome_loc"), "--remote-debugging-port=$curPort", "--user-data-dir=$user")
+        Runtime.getRuntime().exec(cmd)
     }
 
 
@@ -108,6 +118,7 @@ fun main(args: Array<String>) {
      * .\chrome.exe --remote-debugging-port=8989 --user-data-dir=D:/usrData
      * .\chrome.exe --remote-debugging-port=7000 --user-data-dir=D:/usrData3
      */
+
     val options = Options().apply {
         addOption(Option("help", "print this message"))
         addOption(
