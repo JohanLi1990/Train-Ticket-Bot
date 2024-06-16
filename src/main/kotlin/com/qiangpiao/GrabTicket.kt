@@ -3,7 +3,7 @@ package com.qiangpiao
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.asCoroutineDispatcher
+import kotlinx.coroutines.ExecutorCoroutineDispatcher
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.supervisorScope
@@ -13,10 +13,12 @@ import org.apache.commons.cli.Option
 import org.apache.commons.cli.Options
 import org.openqa.selenium.chrome.ChromeDriver
 import org.openqa.selenium.chrome.ChromeOptions
-import java.util.concurrent.Executors
+import org.springframework.boot.CommandLineRunner
+import org.springframework.stereotype.Component
 
-class GrabTicket {
-    private val dispatcher = Executors.newFixedThreadPool(3).asCoroutineDispatcher()
+
+@Component
+class GrabTicket(val dispatcher: ExecutorCoroutineDispatcher) :CommandLineRunner {
     companion object{
         val logger = KotlinLogging.logger{}
     }
@@ -24,7 +26,10 @@ class GrabTicket {
         supervisorScope {
             for ((i, trip) in trips.withIndex()) {
                 logger.info { "trip-$i:${trip}" }
-                val driver =  ChromeDriver(chromeOptions(PropertiesReader.getProperty("host_$i"), arrayOf("--start-maximized")))
+                // start chrome browser
+                startChromeBrowser(i)
+                val port = PropertiesReader.getProperty("port_$i")
+                val driver =  ChromeDriver(chromeOptions("localhost:$port", arrayOf("--start-maximized")))
                 if (trip.isOneWay()) {
                     bookOneWay(driver, trip.onwardDate, trip.onwardTime,
                         trip.isJBToWDL, trip.pax, Mode.getMode(trip.Mode))
@@ -36,6 +41,13 @@ class GrabTicket {
             }
         }
         dispatcher.close()
+    }
+
+    private fun startChromeBrowser(index:Int) {
+        val curPort = PropertiesReader.getProperty("port_$index")
+        val user = PropertiesReader.getProperty("user_${index}_dir")
+        val cmd = arrayOf(PropertiesReader.getProperty("chrome_loc"), "--remote-debugging-port=$curPort", "--user-data-dir=$user")
+        Runtime.getRuntime().exec(cmd)
     }
 
 
@@ -77,6 +89,59 @@ class GrabTicket {
         }
     }
 
+    override fun run(vararg args: String?) {
+//    https://www.selenium.dev/documentation/webdriver/getting_started/first_script/
+//   https://juejin.cn/post/7008718256752033799
+
+        // when you have time , learn to use corouting chanel
+        // https://stackoverflow.com/questions/73119442/how-to-properly-have-a-queue-of-pending-operations-using-kotlin-coroutines/73125591#73125591
+
+        /**
+         * We need to run the following command first
+         * .\chrome.exe --remote-debugging-port=1234 --user-data-dir=D:/usrData2
+         * .\chrome.exe --remote-debugging-port=8989 --user-data-dir=D:/usrData
+         * .\chrome.exe --remote-debugging-port=7000 --user-data-dir=D:/usrData3
+         */
+
+        val options = Options().apply {
+            addOption(Option("help", "print this message"))
+            addOption(
+                Option.builder("trips").argName("Trip Information")
+                    .hasArgs().desc("7 fields could be defined, the first 5 are optional: \n" +
+                            "<Pax, Onward Date, Onward Time,isJBToWDL,Mode,Return Date, Return Time>. \n" +
+                            "For Pax, it could be up to 6; For Date input, use format like 24 Nov 2024, \n" +
+                            "For time input, use format like 2015 (8:15pm) or 0830, based on KTMB schedule.\n" +
+                            "For isJBToWDL, it is either y or n\n" +
+                            "For mode, it is either H or M\n"+
+                            "Return Date and Return time are optional, \n" +
+                            " if any is empty, we will treat it as a one way trip.\n" +
+                            "Currently we support simultaneous booking of 3 trips"
+                    ).build()
+            )
+        }
+
+        val parser = DefaultParser()
+        val line = parser.parse(options, args)
+        if (line.hasOption("help")) {
+            HelpFormatter().printHelp("GrabTicket", options)
+            return
+        }
+
+        if (line.hasOption("trips")) {
+            val ans = line.getOptionValues("trips")
+            val trips = ArrayList<Trip>().apply {
+                ans.forEach {
+                    val tripDetails = it.split(",")
+                    add(Trip(tripDetails[0].trim().toInt(), tripDetails[1].trim(),
+                        tripDetails[2].trim(),tripDetails[3].trim() == "y",
+                        tripDetails[4].trim(),
+                        tripDetails.getOrNull(5)?.trim(), tripDetails.getOrNull(5)?.trim()))
+                }
+            }
+            this.process(trips)
+        }
+    }
+
 }
 
 enum class Mode {
@@ -95,55 +160,4 @@ enum class Mode {
 
 
 
-fun main(args: Array<String>) {
-//    https://www.selenium.dev/documentation/webdriver/getting_started/first_script/
-//   https://juejin.cn/post/7008718256752033799
-
-    // when you have time , learn to use corouting chanel
-    // https://stackoverflow.com/questions/73119442/how-to-properly-have-a-queue-of-pending-operations-using-kotlin-coroutines/73125591#73125591
-
-    /**
-     * We need to run the following command first
-     * .\chrome.exe --remote-debugging-port=1234 --user-data-dir=D:/usrData2
-     * .\chrome.exe --remote-debugging-port=8989 --user-data-dir=D:/usrData
-     * .\chrome.exe --remote-debugging-port=7000 --user-data-dir=D:/usrData3
-     */
-    val options = Options().apply {
-        addOption(Option("help", "print this message"))
-        addOption(
-            Option.builder("trips").argName("Trip Information")
-                .hasArgs().desc("7 fields could be defined, the first 5 are optional: \n" +
-                        "<Pax, Onward Date, Onward Time,isJBToWDL,Mode,Return Date, Return Time>. \n" +
-                        "For Pax, it could be up to 6; For Date input, use format like 24 Nov 2024, \n" +
-                        "For time input, use format like 2015 (8:15pm) or 0830, based on KTMB schedule.\n" +
-                        "For isJBToWDL, it is either y or n\n" +
-                        "For mode, it is either H or M\n"+
-                        "Return Date and Return time are optional, \n" +
-                        " if any is empty, we will treat it as a one way trip.\n" +
-                        "Currently we support simultaneous booking of 3 trips"
-                ).build()
-        )
-    }
-
-    val parser = DefaultParser()
-    val line = parser.parse(options, args)
-    if (line.hasOption("help")) {
-        HelpFormatter().printHelp("GrabTicket", options)
-        return
-    }
-
-    if (line.hasOption("trips")) {
-        val ans = line.getOptionValues("trips")
-        val trips = ArrayList<Trip>().apply {
-            ans.forEach {
-                val tripDetails = it.split(",")
-                add(Trip(tripDetails[0].trim().toInt(), tripDetails[1].trim(),
-                    tripDetails[2].trim(),tripDetails[3].trim() == "y",
-                    tripDetails[4].trim(),
-                    tripDetails.getOrNull(5)?.trim(), tripDetails.getOrNull(5)?.trim()))
-            }
-        }
-        GrabTicket().process(trips)
-    }
-}
 
