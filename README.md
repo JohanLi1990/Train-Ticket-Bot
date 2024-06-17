@@ -1,6 +1,12 @@
 # Train Ticket Bot (TTB)
 
-TTB is a console app that help you buy train ticket between Woodland and Johor Bahru.
+TTB is a console app that help you buy [train ticket](https://shuttleonline.ktmb.com.my/Home/Shuttle) 
+between Woodland and Johor Bahru.
+
+## Pre-requisite
+
+You need to able to logon to [KTMB](https://online.ktmb.com.my/Account/Login)
+with email and password combination.
 
 ## Installation
 
@@ -11,6 +17,7 @@ TTB is a console app that help you buy train ticket between Woodland and Johor B
 - you need to have a chrome browser, and the chrome.exe dir is added to path.
 ![Chrome and Java variable](chrome_java.png)
 
+## Configurations
 
 ## Usage
 
