@@ -21,7 +21,8 @@ class BookTicketStateMachine(
     val returnTime: String,
     val jBToWdl: Boolean = false,
     val mode: Mode = Mode.HUSTLE,
-    val numOfPassenger:Int=1
+    val numOfPassenger:Int=1,
+    val configUtility: ConfigUtility
 ) {
     private val wait: WebDriverWait = WebDriverWait(driver, Duration.ofSeconds(15))
     private var countDown = if (mode == Mode.MONITOR) 2000 else 100
@@ -100,7 +101,7 @@ class BookTicketStateMachine(
         for (i in 1..<numOfPassenger) {
             wait.until {
                 val psg = driver.findElement(By.id("Passengers_${i}__FullName"))
-                psg.sendKeys(PropertiesReader.getProperty("PASSENGER${i}"))
+                psg.sendKeys(configUtility.getProperty("PASSENGER${i}"))
                 psg.sendKeys(Keys.ENTER)
             }
         }
@@ -112,7 +113,7 @@ class BookTicketStateMachine(
     }
 
     private fun login(): State {
-        driver.get(PropertiesReader.getProperty("login_url"))
+        driver.get(configUtility.getProperty("login_url"))
         try {
             wait.until {
                 driver.title.isNotBlank()
@@ -123,8 +124,8 @@ class BookTicketStateMachine(
             wait.until {
                 val pWord = driver.findElement(By.id("Password"))
                 val email = driver.findElement(By.id("Email"))
-                pWord.sendKeys(PropertiesReader.getProperty("password"))
-                email.sendKeys(PropertiesReader.getProperty("email"))
+                pWord.sendKeys(configUtility.getProperty("password"))
+                email.sendKeys(configUtility.getProperty("email"))
                 driver.findElement(By.id("LoginButton")).click()
                 return@until true
             }
@@ -139,7 +140,7 @@ class BookTicketStateMachine(
     }
 
     private fun selectDateForShuttle(): State {
-        driver.get(PropertiesReader.getProperty("shuttle_url"))
+        driver.get(configUtility.getProperty("shuttle_url"))
         // need to dismiss modal
         if (popupModalIsPresent()) {
             logger.info{"Presence of popup modal detected...retry"}

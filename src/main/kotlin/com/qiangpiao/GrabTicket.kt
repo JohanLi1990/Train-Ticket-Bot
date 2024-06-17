@@ -18,7 +18,7 @@ import org.springframework.stereotype.Component
 
 
 @Component
-class GrabTicket(val dispatcher: ExecutorCoroutineDispatcher) :CommandLineRunner {
+class GrabTicket(val dispatcher: ExecutorCoroutineDispatcher, val configUtility: ConfigUtility) :CommandLineRunner {
     companion object{
         val logger = KotlinLogging.logger{}
     }
@@ -28,7 +28,7 @@ class GrabTicket(val dispatcher: ExecutorCoroutineDispatcher) :CommandLineRunner
                 logger.info { "trip-$i:${trip}" }
                 // start chrome browser
                 startChromeBrowser(i)
-                val port = PropertiesReader.getProperty("port_$i")
+                val port = configUtility.getProperty("port_$i")
                 val driver =  ChromeDriver(chromeOptions("localhost:$port", arrayOf("--start-maximized")))
                 if (trip.isOneWay()) {
                     bookOneWay(driver, trip.onwardDate, trip.onwardTime,
@@ -44,9 +44,9 @@ class GrabTicket(val dispatcher: ExecutorCoroutineDispatcher) :CommandLineRunner
     }
 
     private fun startChromeBrowser(index:Int) {
-        val curPort = PropertiesReader.getProperty("port_$index")
-        val user = PropertiesReader.getProperty("user_${index}_dir")
-        val cmd = arrayOf(PropertiesReader.getProperty("chrome_loc"), "--remote-debugging-port=$curPort", "--user-data-dir=$user")
+        val curPort = configUtility.getProperty("port_$index")
+        val user = configUtility.getProperty("user_${index}_dir")
+        val cmd = arrayOf(configUtility.getProperty("chrome_loc"), "--remote-debugging-port=$curPort", "--user-data-dir=$user")
         Runtime.getRuntime().exec(cmd)
     }
 
@@ -69,7 +69,8 @@ class GrabTicket(val dispatcher: ExecutorCoroutineDispatcher) :CommandLineRunner
             BookTicketStateMachine(
                 driver = driver1, onWardDate = onwardDate,
                 onWardTime = tripTime,
-                returnDate = "", returnTime = "", jBToWdl = isReturn, mode = inputMode, numOfPassenger = pax
+                returnDate = "", returnTime = "", jBToWdl = isReturn,
+                mode = inputMode, numOfPassenger = pax, configUtility= configUtility
             ).runStateMachine()
         }
     }
@@ -84,7 +85,7 @@ class GrabTicket(val dispatcher: ExecutorCoroutineDispatcher) :CommandLineRunner
             BookTicketStateMachine(
                 driver = driver, onWardDate = onWardDate, returnDate = returnDate,
                 onWardTime = onWardTripTime, returnTime = returnTripTime, jBToWdl = jBToWdl,
-                numOfPassenger = pax, mode = inputMode
+                numOfPassenger = pax, mode = inputMode, configUtility = configUtility
             ).runStateMachine()
         }
     }
