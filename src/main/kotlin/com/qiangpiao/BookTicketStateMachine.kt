@@ -24,8 +24,11 @@ class BookTicketStateMachine(
     val numOfPassenger:Int=1,
     val configUtility: ConfigUtility
 ) {
-    private val wait: WebDriverWait = WebDriverWait(driver, Duration.ofSeconds(15))
+    private val wait: WebDriverWait = WebDriverWait(driver, Duration.ofSeconds(20))
     private var countDown = if (mode == Mode.MONITOR) 2000 else 100
+
+    private val loginUrl = configUtility.getProperty("login_url")
+    private val shuttleUrl = configUtility.getProperty("shuttle_url")
     companion object{
         private val logger = KotlinLogging.logger{}
     }
@@ -55,7 +58,7 @@ class BookTicketStateMachine(
 
             State.SELECT_TIME -> {
                 val res = selectTimeSlot()
-                delay(1000)
+                delay(600)
                 decide(res)
 
             }
@@ -113,7 +116,7 @@ class BookTicketStateMachine(
     }
 
     private fun login(): State {
-        driver.get(configUtility.getProperty("login_url"))
+        driver.get(loginUrl)
         try {
             wait.until {
                 driver.title.isNotBlank()
@@ -140,7 +143,7 @@ class BookTicketStateMachine(
     }
 
     private fun selectDateForShuttle(): State {
-        driver.get(configUtility.getProperty("shuttle_url"))
+        driver.get(shuttleUrl)
         // need to dismiss modal
         if (popupModalIsPresent()) {
             logger.info{"Presence of popup modal detected...retry"}
