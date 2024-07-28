@@ -81,23 +81,28 @@ class BookTicketStateMachine(
         }
     }
 
-    private fun updatePassengerDetails(): State {
-        return try {
-            if (driver.title != "Passenger details") {
-                logger.info{"${Thread.currentThread().name} did not land on Passenger details..."}
-                if (mode == Mode.HUSTLE) State.SELECT_DATE else State.LOGIN
-            }
-            wait.until(ExpectedConditions.titleIs("Passenger details"))
-            fillInForSelf()
-            fillInForOthers()
-            logger.info{"${Thread.currentThread().name} successfully landed in passenger details page..."}
-            State.QUIT
-        } catch (e: Exception) {
-            // something wrong
-            logger.info{"Something is wrong at Update Passengers page... do not go away"}
-            State.QUIT
+    private fun updatePassengerDetails(): State = try {
+        logger.info { "${Thread.currentThread().name} successfully landed in passenger details page..." }
+        if (driver.title != "Passenger details") {
+            logger.info { "${Thread.currentThread().name} did not land on Passenger details..." }
+            if (mode == Mode.HUSTLE) State.SELECT_DATE else State.LOGIN
         }
+        wait.until(ExpectedConditions.titleIs("Passenger details"))
+        fillInForSelf()
+        fillInForOthers()
+        proceedToPayment()
+
+        State.QUIT
+    } catch (e: Exception) {
+        // something wrong
+        logger.info { "Something is wrong at Update Passengers page... do not go away" }
+        State.QUIT
     }
+
+    private fun proceedToPayment() {
+        driver.findElement(By.id("btnConfirmPayment")).click()
+    }
+
 
     private fun fillInForOthers() {
         if (numOfPassenger == 1) return
@@ -106,6 +111,8 @@ class BookTicketStateMachine(
                 val psg = driver.findElement(By.id("Passengers_${i}__FullName"))
                 psg.sendKeys(configUtility.getProperty("PASSENGER${i}"))
                 psg.sendKeys(Keys.ENTER)
+                setTicketType(i)
+                return@until "completed";
             }
         }
     }
@@ -113,6 +120,16 @@ class BookTicketStateMachine(
     private fun fillInForSelf() {
         val jsDriver = driver as JavascriptExecutor
         jsDriver.executeScript("document.getElementById('Passengers_0__IsSelf').click()")
+        setTicketType(0)
+    }
+
+    private fun setTicketType(passenger : Int) {
+        // DEWASA ADULT ticket type
+        val ticketTypeElement = driver.findElement(By.id("Passengers_${passenger}__TicketTypeId"))
+        Select(ticketTypeElement).apply {
+            selectByValue("Adult")
+        }
+
     }
 
     private fun login(): State {
