@@ -112,7 +112,7 @@ class BookTicketStateMachine(
                 psg.sendKeys(configUtility.getProperty("PASSENGER${i}"))
                 psg.sendKeys(Keys.ENTER)
                 setTicketType(i)
-                return@until "completed";
+                return@until "completed"
             }
         }
     }
