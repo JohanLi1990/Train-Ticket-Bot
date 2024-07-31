@@ -1,5 +1,6 @@
 package com.qiangpiao
 
+import com.qiangpiao.util.ChromeManager
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
@@ -12,13 +13,13 @@ import org.apache.commons.cli.HelpFormatter
 import org.apache.commons.cli.Option
 import org.apache.commons.cli.Options
 import org.openqa.selenium.chrome.ChromeDriver
-import org.openqa.selenium.chrome.ChromeOptions
 import org.springframework.boot.CommandLineRunner
+import org.springframework.core.env.Environment
 import org.springframework.stereotype.Component
 
 
 @Component
-class GrabTicket(val dispatcher: ExecutorCoroutineDispatcher, val configUtility: ConfigUtility) :CommandLineRunner {
+class GrabTicket(val dispatcher: ExecutorCoroutineDispatcher, val chromeManager: ChromeManager, val environment: Environment) :CommandLineRunner {
     companion object{
         val logger = KotlinLogging.logger{}
     }
@@ -26,10 +27,12 @@ class GrabTicket(val dispatcher: ExecutorCoroutineDispatcher, val configUtility:
         supervisorScope {
             for ((i, trip) in trips.withIndex()) {
                 logger.info { "trip-$i:${trip}" }
-                // start chrome browser
-                startChromeBrowser(i)
-                val port = configUtility.getProperty("port_$i")
-                val driver =  ChromeDriver(chromeOptions("localhost:$port", arrayOf("--start-maximized")))
+                val driver =  chromeManager.createChromeDriver()
+                if (driver == null) {
+                    logger.info { "cannot start chrome driver... trip dropped" }
+                    break
+                }
+
                 if (trip.isOneWay()) {
                     bookOneWay(driver, trip.onwardDate, trip.onwardTime,
                         trip.isJBToWDL, trip.pax, Mode.getMode(trip.Mode))
@@ -43,22 +46,6 @@ class GrabTicket(val dispatcher: ExecutorCoroutineDispatcher, val configUtility:
         dispatcher.close()
     }
 
-    private fun startChromeBrowser(index:Int) {
-        val curPort = configUtility.getProperty("port_$index")
-        val user = configUtility.getProperty("user_${index}_dir")
-        val cmd = arrayOf(configUtility.getProperty("chrome_loc"), "--remote-debugging-port=$curPort", "--user-data-dir=$user")
-        Runtime.getRuntime().exec(cmd)
-    }
-
-
-    private fun chromeOptions(host: String, args: Array<String>): ChromeOptions {
-        val options = ChromeOptions()
-        options.setExperimentalOption("debuggerAddress", host)
-        args.forEach {
-            options.addArguments(it)
-        }
-        return options
-    }
 
     private fun CoroutineScope.bookOneWay(
         driver1: ChromeDriver,
@@ -70,7 +57,7 @@ class GrabTicket(val dispatcher: ExecutorCoroutineDispatcher, val configUtility:
                 driver = driver1, onWardDate = onwardDate,
                 onWardTime = tripTime,
                 returnDate = "", returnTime = "", jBToWdl = isReturn,
-                mode = inputMode, numOfPassenger = pax, configUtility= configUtility
+                mode = inputMode, numOfPassenger = pax,env= environment
             ).runStateMachine()
         }
     }
@@ -85,7 +72,7 @@ class GrabTicket(val dispatcher: ExecutorCoroutineDispatcher, val configUtility:
             BookTicketStateMachine(
                 driver = driver, onWardDate = onWardDate, returnDate = returnDate,
                 onWardTime = onWardTripTime, returnTime = returnTripTime, jBToWdl = jBToWdl,
-                numOfPassenger = pax, mode = inputMode, configUtility = configUtility
+                numOfPassenger = pax, mode = inputMode, env = environment
             ).runStateMachine()
         }
     }
@@ -94,7 +81,7 @@ class GrabTicket(val dispatcher: ExecutorCoroutineDispatcher, val configUtility:
 //    https://www.selenium.dev/documentation/webdriver/getting_started/first_script/
 //   https://juejin.cn/post/7008718256752033799
 
-        // when you have time , learn to use corouting chanel
+        // when you have time , learn to use coroutine chanel
         // https://stackoverflow.com/questions/73119442/how-to-properly-have-a-queue-of-pending-operations-using-kotlin-coroutines/73125591#73125591
 
         /**
