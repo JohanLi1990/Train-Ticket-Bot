@@ -11,6 +11,7 @@ import org.openqa.selenium.WebDriver
 import org.openqa.selenium.support.ui.ExpectedConditions
 import org.openqa.selenium.support.ui.Select
 import org.openqa.selenium.support.ui.WebDriverWait
+import org.springframework.core.env.Environment
 import java.time.Duration
 
 class BookTicketStateMachine(
@@ -21,16 +22,17 @@ class BookTicketStateMachine(
     val returnTime: String,
     val jBToWdl: Boolean = false,
     val mode: Mode = Mode.HUSTLE,
-    val numOfPassenger:Int=1,
-    val configUtility: ConfigUtility
+    val numOfPassenger: Int = 1,
+    val env: Environment
 ) {
     private val wait: WebDriverWait = WebDriverWait(driver, Duration.ofSeconds(20))
     private var countDown = if (mode == Mode.MONITOR) 2000 else 100
 
-    private val loginUrl = configUtility.getProperty("login_url")
-    private val shuttleUrl = configUtility.getProperty("shuttle_url")
-    companion object{
-        private val logger = KotlinLogging.logger{}
+    private val loginUrl = env.getProperty("login_url")
+    private val shuttleUrl = env.getProperty("shuttle_url")
+
+    companion object {
+        private val logger = KotlinLogging.logger {}
     }
 
     suspend fun runStateMachine() {
@@ -75,32 +77,47 @@ class BookTicketStateMachine(
                 decide(res)
             }
 
-            State.QUIT -> {
-                logger.info{"${Thread.currentThread().name}: state machine ended..."}
+            State.CHOOSE_PAYMENT_TYPE -> {
+                val res = selectPaymentMethod()
+                delay(200)
+                decide(res)
             }
+
+            State.QUIT -> {
+                logger.info { "${Thread.currentThread().name}: state machine ended..." }
+            }
+
+
         }
+    }
+
+    private fun selectPaymentMethod(): State {
+        println(driver.title)
+        wait.until{
+            driver.findElement(By.id("btnKtmbEWallet")).click()
+            return@until "completed"
+        }
+
+        return State.QUIT
+
     }
 
     private fun updatePassengerDetails(): State = try {
-        logger.info { "${Thread.currentThread().name} successfully landed in passenger details page..." }
-        if (driver.title != "Passenger details") {
-            logger.info { "${Thread.currentThread().name} did not land on Passenger details..." }
-            if (mode == Mode.HUSTLE) State.SELECT_DATE else State.LOGIN
-        }
+
         wait.until(ExpectedConditions.titleIs("Passenger details"))
+        logger.info { "${Thread.currentThread().name} successfully landed in passenger details page..." }
         fillInForSelf()
         fillInForOthers()
         proceedToPayment()
-
-        State.QUIT
     } catch (e: Exception) {
         // something wrong
-        logger.info { "Something is wrong at Update Passengers page... do not go away" }
+        logger.info { "Something is wrong at Update Passengers page..cannot proceed to payment.. do not go away" }
         State.QUIT
     }
 
-    private fun proceedToPayment() {
+    private fun proceedToPayment(): State {
         driver.findElement(By.id("btnConfirmPayment")).click()
+        return State.CHOOSE_PAYMENT_TYPE
     }
 
 
@@ -109,7 +126,7 @@ class BookTicketStateMachine(
         for (i in 1..<numOfPassenger) {
             wait.until {
                 val psg = driver.findElement(By.id("Passengers_${i}__FullName"))
-                psg.sendKeys(configUtility.getProperty("PASSENGER${i}"))
+                psg.sendKeys(env.getProperty("PASSENGER${i}"))
                 psg.sendKeys(Keys.ENTER)
                 setTicketType(i)
                 return@until "completed"
@@ -123,7 +140,7 @@ class BookTicketStateMachine(
         setTicketType(0)
     }
 
-    private fun setTicketType(passenger : Int) {
+    private fun setTicketType(passenger: Int) {
         // DEWASA ADULT ticket type
         val ticketTypeElement = driver.findElement(By.id("Passengers_${passenger}__TicketTypeId"))
         Select(ticketTypeElement).apply {
@@ -133,6 +150,7 @@ class BookTicketStateMachine(
     }
 
     private fun login(): State {
+
         driver.get(loginUrl)
         try {
             wait.until {
@@ -144,14 +162,14 @@ class BookTicketStateMachine(
             wait.until {
                 val pWord = driver.findElement(By.id("Password"))
                 val email = driver.findElement(By.id("Email"))
-                pWord.sendKeys(configUtility.getProperty("password"))
-                email.sendKeys(configUtility.getProperty("email"))
+                pWord.sendKeys(env.getProperty("password"))
+                email.sendKeys(env.getProperty("email"))
                 driver.findElement(By.id("LoginButton")).click()
                 return@until true
             }
             return State.SELECT_DATE
         } catch (e: Exception) {
-            logger.info{"exception: ${e.message}"}
+            logger.info { "exception: ${e.message}" }
             // retry
             countDown--
             return State.LOGIN
@@ -163,7 +181,7 @@ class BookTicketStateMachine(
         driver.get(shuttleUrl)
         // need to dismiss modal
         if (popupModalIsPresent()) {
-            logger.info{"Presence of popup modal detected...retry"}
+            logger.info { "Presence of popup modal detected...retry" }
             return if (mode == Mode.HUSTLE) State.SELECT_DATE else State.LOGIN
         }
         try {
@@ -258,8 +276,8 @@ class BookTicketStateMachine(
             return State.RECAPTCHA
         } catch (e: Exception) {
             when (e) {
-                is TimeoutException -> logger.info{"${Thread.currentThread().name}: time out"}
-                is ElementNotInteractableException -> logger.info{"${Thread.currentThread().name}:not enabled yet"}
+                is TimeoutException -> logger.info { "${Thread.currentThread().name}: time out" }
+                is ElementNotInteractableException -> logger.info { "${Thread.currentThread().name}:not enabled yet" }
                 else -> throw e
             }
             countDown--
@@ -287,7 +305,7 @@ class BookTicketStateMachine(
     }
 
     private enum class State {
-        LOGIN, SELECT_DATE, SELECT_TIME, RECAPTCHA,UPDATE_PSG_DETAILS, QUIT
+        LOGIN, SELECT_DATE, SELECT_TIME, RECAPTCHA, UPDATE_PSG_DETAILS, CHOOSE_PAYMENT_TYPE, QUIT
     }
 
 }
