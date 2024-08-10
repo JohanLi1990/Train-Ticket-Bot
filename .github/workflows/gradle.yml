@@ -12,8 +12,6 @@ on:
     tags:
     - '*'
 
-permissions: write-all
-
 jobs:
   build:
 
@@ -46,7 +44,7 @@ jobs:
     - name: Create Release
       uses: softprops/action-gh-release@v2
       with:
-#        repo_token: "${{ secrets.GITHUB_TOKEN }}"
+        token: "${{ secrets.TTB}}"
 #        prerelease: false
         files: build/libs/*
             
