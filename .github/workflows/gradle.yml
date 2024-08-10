@@ -11,7 +11,9 @@ on:
   push:
     tags:
     - '*'
-  
+
+permissions: write-all
+
 jobs:
   build:
 
