@@ -106,7 +106,7 @@ class BookTicketStateMachine(
 
         wait.until(ExpectedConditions.titleIs("Passenger details"))
         logger.info { "${Thread.currentThread().name} successfully landed in passenger details page..." }
-        fillInForSelf()
+//        fillInForSelf()
         fillInForOthers()
         proceedToPayment()
     } catch (e: Exception) {
@@ -122,8 +122,8 @@ class BookTicketStateMachine(
 
 
     private fun fillInForOthers() {
-        if (numOfPassenger == 1) return
-        for (i in 1..<numOfPassenger) {
+//        if (numOfPassenger == 1) return
+        for (i in 0..<numOfPassenger) {
             wait.until {
                 val psg = driver.findElement(By.id("Passengers_${i}__FullName"))
                 psg.sendKeys(env.getProperty("PASSENGER${i}"))

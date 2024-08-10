@@ -5,29 +5,37 @@ import org.openqa.selenium.chrome.ChromeOptions
 import org.springframework.core.env.Environment
 import org.springframework.stereotype.Component
 import java.nio.file.Files
+import java.nio.file.Path
 
 @Component
 class ChromeManager(val env: Environment, val portResourceManager: PortResourceManager) {
     // dynamically generate web browser
-    private fun startChromeBrowser() : Int {
+
+    private val tempFileList = ArrayList<Path>()
+
+    private fun startChromeBrowser(): Int {
         val curPort = portResourceManager.pollAPort()
-        val usrDataDir = createUsrDataTempDir();
-        println(usrDataDir)
-        val cmd = arrayOf(env.getProperty("chrome_loc"), "--remote-debugging-port=$curPort", "--user-data-dir=${usrDataDir}")
+        val usrDataDir = createUsrDataTempDir()
+        val cmd =
+            arrayOf(env.getProperty("chrome_loc"), "--remote-debugging-port=$curPort", "--user-data-dir=${usrDataDir}")
         Runtime.getRuntime().exec(cmd)
         return curPort
     }
 
     private fun createUsrDataTempDir(): String {
-       return Files.createTempDirectory("tempdir").toAbsolutePath().toString();
+        val tempdir = Files.createTempDirectory("ttbdir")
+        // add shutdown hook here.
+        tempFileList.add(tempdir)
+        return tempdir.toAbsolutePath().toString()
+//        Files.createTempDirectory("tempdir").toAbsolutePath().toString();
     }
 
 
-    fun createChromeDriver() : ChromeDriver? {
-        return try{
-            var nextFreePort =  startChromeBrowser()
+    fun createChromeDriver(): ChromeDriver? {
+        return try {
+            var nextFreePort = startChromeBrowser()
             ChromeDriver(chromeOptions("localhost:$nextFreePort", arrayOf("--start-maximized")))
-        } catch (e:Exception) {
+        } catch (e: Exception) {
             null
         }
     }
