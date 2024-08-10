@@ -9,10 +9,9 @@ name: Java CI with Gradle
 
 on:
   push:
-    branches: [ "master" ]
-  pull_request:
-    branches: [ "master" ]
-
+    tags:
+    - '*'
+  
 jobs:
   build:
 
@@ -41,3 +40,9 @@ jobs:
       with:
         name: Package
         path: build/libs
+
+    - name: Create Release
+    - uses: ncipollo/release-action@v1.14.0
+      with:
+        artifacts: "buil/libs/*jar"
+            
