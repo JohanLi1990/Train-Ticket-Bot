@@ -44,5 +44,5 @@ jobs:
     - name: Create Release
       uses: ncipollo/release-action@v1.14.0
       with:
-        artifacts: "buil/libs/*jar"
+        artifacts: "build/libs/*jar"
             
